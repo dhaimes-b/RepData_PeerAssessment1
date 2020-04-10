@@ -1,0 +1,167 @@
+---
+title: "Course_Proj_1 Reproducible Research"
+subtitle: "Author - David Haimes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message = FALSE, echo = TRUE}
+library(tidyverse)
+library(ggpubr)
+
+
+```
+## Project Requirements
+
+Required Steps for Analyzing Step Data Gathered from Wearable Devices\
+1. Code for reading in the dataset and/or processing the data\
+2. Histogram of the total number of steps taken each day\
+3. Mean and median number of steps taken each day\
+4. Time series plot of the average number of steps taken\
+5. The 5-minute interval that, on average, contains the maximum number of steps\
+6. Code to describe and show a strategy for imputing missing data\
+7. Histogram of the total number of steps taken each day after missing values are imputed\
+8. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends\
+9. All of the R code needed to reproduce the results (numbers, plots, etc.) in the report\
+
+## Assessing Total Number Steps/Day
+
+```{r, echo = TRUE}
+#Read in dataset
+#getwd()
+df <- read.csv("repdata_data_activity/activity.csv", header = T)
+
+#Transform Dataset 
+df <- df %>% 
+  mutate(Dates_Corr = as.Date(df$date, format = "%Y-%m-%d"))
+
+
+# Calculate total # of steps / day
+defaultW = getOption("warn") # trick to suppress warnings tripped by NAs in df
+options(warn = -1)
+total_steps <- df %>% 
+  group_by(Dates_Corr) %>% 
+  summarize(sum = sum(steps))
+#  Histogram of total number steps taken each day
+ggplot(total_steps, aes(x = sum)) + 
+  geom_histogram( bins = 15, col = "black", fill = "steelblue") +
+  xlab("Total Steps in a Given Day") +
+  ylab("Frequency") +
+  ggtitle("Histogram of Steps per Day") +
+  theme_classic()
+
+
+
+# Calculate mean and median of the total steps/day and report
+step_summary <- total_steps %>% 
+  filter(!is.na(sum)) %>% 
+  summarize(mean = mean(sum), median = median(sum))
+mean_steps <- format(round(as.numeric(step_summary[1]),2),nsmall=2)
+median_steps <- format(round(as.numeric(step_summary[2]),2),nsmall=2)
+options(warn = defaultW) # reset warnings back to normal
+  
+```
+
+The mean of the total steps per day results is `r mean_steps`.\
+The median of the total steps per day results is `r median_steps`.\
+
+## Daily Activity Pattern
+
+
+```{r, echo=TRUE}
+#Make time series plot (type = "1") of 5m interval and avg number of steps taken across all days (y axis)
+
+ToD_avg <- df %>% 
+  group_by(interval) %>% 
+  summarize(avg_steps = mean(steps,na.rm = T))
+
+ToD_avg %>% 
+  ggplot(aes(interval, avg_steps)) + 
+  geom_line() +
+  xlab("Interval Time") +
+  ylab("Average Number of Steps") +
+  ggtitle("Average Number of Steps Across All Days per 5 Minute Interval")+
+  theme_classic()
+
+# Find Max # steps across all intervals
+POI <- ToD_avg[which(ToD_avg[,2] == max(ToD_avg$avg_steps)),]
+max_avgsteps <- format(round(as.numeric(POI[2]),2),nsmall=2)
+interval_num <- format(round(as.numeric(POI[1]),2),nsmall=2)
+
+```
+
+The peak (maximum) number of steps averaged across all days is `r max_avgsteps` at interval `r interval_num`.\
+
+## Missing data Imputation
+
+
+```{r, echo = TRUE}
+# Calculate total number of NAs
+total_NAs <- sum((is.na(df$steps)))
+
+# Fill in missing values in dataset
+
+df_replaced <- merge(df, ToD_avg, by="interval", all = T)
+df_replaced <- df_replaced %>% 
+  mutate(steps = ifelse(is.na(df_replaced$steps),df_replaced$avg_steps,df_replaced$steps)) %>% 
+  select(steps,date,interval,Dates_Corr)
+
+
+# Make a histogram of total num steps per day
+total_steps_imputed <- df_replaced %>% 
+  group_by(Dates_Corr) %>% 
+  summarize(sum = sum(steps))
+ggplot(total_steps_imputed, aes(x = sum)) + 
+  geom_histogram( bins = 15, col = "black", fill = "steelblue") +
+  xlab("Total Steps in a Given Day") +
+  ylab("Frequency") +
+  ggtitle("Histogram of Steps per Day") +
+  theme_classic()
+
+# Recalculate mean and media
+step_summary_imp <- total_steps_imputed %>% 
+  filter(!is.na(sum)) %>% 
+  summarize(mean = mean(sum), median = median(sum))
+mean_steps_imp <- format(round(as.numeric(step_summary_imp[1]),2),nsmall=2)
+median_steps_imp <- format(round(as.numeric(step_summary_imp[2]),2),nsmall=2)
+
+```
+\
+\
+The above data has been transformed to replace the `r total_NAs` N/A values with the value for that interval number averaged across all days\
+
+
+With imputed data, the mean is `r mean_steps_imp`, and the median is `r median_steps_imp`\
+
+
+# Are there differences in activity patterns between weekdays and weekends?
+
+```{r, echo=TRUE}
+# Generate new column with factors weekday or weekend
+df_wk <- df_replaced %>% 
+  mutate(Day = ifelse(weekdays(Dates_Corr) == "Sunday" | weekdays(Dates_Corr) == "Saturday", "weekend", "weekday"))
+  
+# Make time series plot, average across weekdays or weekends
+ToD_avg_Weekdays <- df_wk %>% 
+  group_by(Day, interval) %>% 
+  summarize(avg_steps = mean(steps,na.rm = T))
+
+ToD_avg_Weekdays %>% 
+  ggplot(aes(interval, avg_steps)) + 
+  geom_line() +
+  facet_wrap(~Day) +
+  xlab("Interval Time") +
+  ylab("Average Number of Steps") +
+  labs(title = "Average Number of Steps Across All Days per 5 Minute Interval",
+       subtitle = "Sorted by Weekday/Weekend")+
+  
+  theme_classic()
+
+```
+
+
+
